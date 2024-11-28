@@ -1,10 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"os"
-	"time"
 )
 
 func main() {
@@ -16,12 +16,16 @@ func main() {
 	}
 	defer conn.Close() // Ensure the connection is closed when we're done
 
-	// Print that the connection was successful
-	fmt.Println("Connected to the server. Connection will stay open for 5 seconds...")
-
-	// Sleep for 5 seconds to keep the connection open
-	time.Sleep(5 * time.Second)
-
-	// After 5 seconds, the connection will automatically be closed
-	fmt.Println("Closing the connection after 5 seconds")
+	for {
+		reader := bufio.NewReader(os.Stdin)
+		fmt.Print("Enter some text: ")
+		// Read a full line including spaces
+		message, _ := reader.ReadString('\n')
+		fmt.Println(message)
+		_, err = conn.Write([]byte(message))
+		if err != nil {
+			fmt.Println("Error writing to connection:", err)
+			continue
+		}
+	}
 }
