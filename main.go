@@ -18,21 +18,18 @@ func main() {
 
 	tr := p2p.NewTCPTransport(tcpOpts)
 
-	fmt.Println("here - 1")
-	if err := tr.ListenAndAccept(); err != nil {
-		log.Fatal(err)
+	fileServeropts := FileServerOpts{
+		StorageRoot:       "3000_network",
+		PathTransformFunc: CASPathTransformFunc,
+		Transport:         tr,
 	}
-	fmt.Println("here - 2")
-	go func() {
-		fmt.Println("here - in routine")
-		for {
-			msg := <-tr.Consume()
 
-			fmt.Printf("%s\n", string(msg.Payload))
-		}
+	s := NewFileServer(fileServeropts)
 
-	}()
-	fmt.Println("Server started on port 3000")
+	if err := s.Start(); err != nil {
+		log.Fatal(err)
+
+	}
+
 	select {}
-
 }
