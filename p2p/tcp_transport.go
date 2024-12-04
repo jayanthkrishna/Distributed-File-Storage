@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -34,10 +35,19 @@ func NewTCPPeer(conn net.Conn, outbound bool) Peer {
 	}
 }
 
+func (p *TCPPeer) Send(data []byte) error {
+	_, err := p.conn.Write(data)
+	return err
+}
+func (p *TCPPeer) RemoteAddr() net.Addr {
+
+	return p.conn.RemoteAddr()
+
+}
 func (p *TCPPeer) Close() error {
 	return p.conn.Close()
 }
-func NewTCPTransport(opts TCPTransportOpts) Transport {
+func NewTCPTransport(opts TCPTransportOpts) *TCPTransport {
 	return &TCPTransport{
 		TCPTransportOpts: opts,
 		rpcch:            make(chan RPC),
@@ -45,6 +55,22 @@ func NewTCPTransport(opts TCPTransportOpts) Transport {
 		// mu:            sync.RWMutex{},
 		// peers:         make(map[net.Addr]Peer),
 	}
+}
+
+func (t *TCPTransport) Dial(addr string) error {
+	conn, err := net.Dial("tcp", addr)
+
+	if err != nil {
+		return err
+	}
+
+	go t.handleConn(conn, true)
+
+	return nil
+}
+
+func (t *TCPTransport) Close() error {
+	return t.listener.Close()
 }
 
 // Consume implements the transport interface which will return a r4ead only channel.
@@ -71,17 +97,20 @@ func (t *TCPTransport) ListenAndAccept() error {
 func (t *TCPTransport) startLoop() {
 	for {
 		conn, err := t.listener.Accept()
+		if errors.Is(err, net.ErrClosed) {
+			return
+		}
 
 		if err != nil {
 			fmt.Printf("TCP accept error: %s\n", err)
 			continue
 		}
 
-		go t.handleConn(conn)
+		go t.handleConn(conn, false)
 	}
 }
 
-func (t *TCPTransport) handleConn(conn net.Conn) {
+func (t *TCPTransport) handleConn(conn net.Conn, outbound bool) {
 
 	var err error
 	defer func() {
