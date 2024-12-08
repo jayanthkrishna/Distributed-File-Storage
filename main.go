@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/jayanthkrishna/Distributed-File-Storage/p2p"
@@ -40,5 +41,9 @@ func main() {
 
 	go s1.Start()
 	go s2.Start()
+
+	data := bytes.NewReader([]byte("My big data file is here!!!"))
+
+	s2.Store("myprivatekey", data)
 	select {}
 }

@@ -9,7 +9,7 @@ import (
 
 // TCP Peer represents the remote node over a TCP connection
 type TCPPeer struct {
-	conn net.Conn
+	net.Conn
 	// If we dial a connection , it is outbound. If we accept a conn, it is inbound
 	outbound bool
 }
@@ -30,22 +30,22 @@ type TCPTransport struct {
 
 func NewTCPPeer(conn net.Conn, outbound bool) Peer {
 	return &TCPPeer{
-		conn:     conn,
+		Conn:     conn,
 		outbound: outbound,
 	}
 }
 
 func (p *TCPPeer) Send(data []byte) error {
-	_, err := p.conn.Write(data)
+	_, err := p.Conn.Write(data)
 	return err
 }
 func (p *TCPPeer) RemoteAddr() net.Addr {
 
-	return p.conn.RemoteAddr()
+	return p.Conn.RemoteAddr()
 
 }
 func (p *TCPPeer) Close() error {
-	return p.conn.Close()
+	return p.Conn.Close()
 }
 func NewTCPTransport(opts TCPTransportOpts) *TCPTransport {
 	return &TCPTransport{
@@ -141,7 +141,7 @@ func (t *TCPTransport) handleConn(conn net.Conn, outbound bool) {
 			continue
 
 		}
-		msg.From = conn.RemoteAddr()
+		msg.From = conn.RemoteAddr().String()
 		t.rpcch <- *msg
 
 	}

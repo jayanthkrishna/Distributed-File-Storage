@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/gob"
 	"fmt"
 	"io"
 	"log"
@@ -19,7 +21,7 @@ type FileServerOpts struct {
 type FileServer struct {
 	FileServerOpts
 	peerLock sync.Mutex
-	peer     map[string]p2p.Peer
+	peers    map[string]p2p.Peer
 	store    *Store
 	quitch   chan struct{}
 }
@@ -33,8 +35,33 @@ func NewFileServer(opts FileServerOpts) *FileServer {
 		FileServerOpts: opts,
 		store:          NewStore(storeOpts),
 		quitch:         make(chan struct{}),
-		peer:           make(map[string]p2p.Peer),
+		peers:          make(map[string]p2p.Peer),
 	}
+}
+
+type Message struct {
+	From    string
+	Payload any
+}
+type Payload struct {
+	key  string
+	Data []byte
+}
+
+func (s *FileServer) handleMessage(p *Payload) error {
+	return nil
+
+}
+func (s *FileServer) broadcast(p *Payload) error {
+	peers := []io.Writer{}
+	for _, peer := range s.peers {
+		peers = append(peers, peer)
+
+	}
+
+	mw := io.MultiWriter(peers...)
+
+	return gob.NewEncoder(mw).Encode(p)
 }
 
 func (s *FileServer) bootstrapNetwork() error {
@@ -61,8 +88,12 @@ func (s *FileServer) loop() {
 	}()
 	for {
 		select {
-		case msg := <-s.Transport.Consume():
-			fmt.Println(msg)
+		case rpc := <-s.Transport.Consume():
+			var msg Message
+			if err := gob.NewDecoder(bytes.NewReader(rpc.Payload)).Decode(&msg); err != nil {
+				log.Println("decoding error: ", err)
+			}
+			fmt.Printf("received: %+v\n", msg)
 		case <-s.quitch:
 			return
 
@@ -74,7 +105,7 @@ func (s *FileServer) OnPeer(p p2p.Peer) error {
 	s.peerLock.Lock()
 	defer s.peerLock.Unlock()
 
-	s.peer[p.RemoteAddr().String()] = p
+	s.peers[p.RemoteAddr().String()] = p
 
 	log.Printf("connected with remote %s", p.RemoteAddr())
 
@@ -96,5 +127,20 @@ func (s *FileServer) Start() error {
 }
 
 func (s *FileServer) Store(key string, r io.Reader) error {
-	return s.store.Write(key, r)
+
+	buf := new(bytes.Buffer)
+
+	tee := io.TeeReader(r, buf)
+
+	if err := s.store.Write(key, tee); err != nil {
+		return err
+	}
+
+	p := &Payload{
+		key:  key,
+		Data: buf.Bytes(),
+	}
+
+	fmt.Println(buf.Bytes())
+	return s.broadcast(p)
 }
