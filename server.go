@@ -93,7 +93,19 @@ func (s *FileServer) loop() {
 			if err := gob.NewDecoder(bytes.NewReader(rpc.Payload)).Decode(&msg); err != nil {
 				log.Println("decoding error: ", err)
 			}
-			fmt.Printf("received: %+v\n", msg)
+
+			peer, ok := s.peers[rpc.From]
+
+			if !ok {
+				panic("Peer not found in the map.")
+			}
+			b := make([]byte, 1000)
+			if _, err := peer.Read(b); err != nil {
+				panic("read error")
+			}
+			fmt.Printf("received: %s\n", string(b))
+
+			peer.(*p2p.TCPPeer).Wg.Done()
 		case <-s.quitch:
 			return
 
@@ -130,17 +142,39 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 
 	buf := new(bytes.Buffer)
 
-	tee := io.TeeReader(r, buf)
+	msg := Message{
+		Payload: []byte("storagekey"),
+	}
 
-	if err := s.store.Write(key, tee); err != nil {
+	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
 		return err
 	}
 
-	p := &Payload{
-		key:  key,
-		Data: buf.Bytes(),
+	for _, peer := range s.peers {
+		if err := peer.Send(buf.Bytes()); err != nil {
+			return err
+		}
 	}
 
-	fmt.Println(buf.Bytes())
-	return s.broadcast(p)
+	payload := []byte("This is a big file!!!")
+	for _, peer := range s.peers {
+		if err := peer.Send(payload); err != nil {
+			return err
+		}
+	}
+	return nil
+
+	// tee := io.TeeReader(r, buf)
+
+	// if err := s.store.Write(key, tee); err != nil {
+	// 	return err
+	// }
+
+	// p := &Payload{
+	// 	key:  key,
+	// 	Data: buf.Bytes(),
+	// }
+
+	// fmt.Println(buf.Bytes())
+	// return s.broadcast(p)
 }
