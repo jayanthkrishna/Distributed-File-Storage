@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/jayanthkrishna/Distributed-File-Storage/p2p"
 )
@@ -40,19 +41,37 @@ func NewFileServer(opts FileServerOpts) *FileServer {
 }
 
 type Message struct {
-	From    string
 	Payload any
 }
-type Payload struct {
-	key  string
-	Data []byte
+
+type MessageStoreFile struct {
+	key string
 }
 
-func (s *FileServer) handleMessage(p *Payload) error {
+func (s *FileServer) handleMessage(from string, msg *Message) error {
+
+	switch v := msg.Payload.(type) {
+	case MessageStoreFile:
+		return s.handleMessageStoreFile(from, v)
+	}
 	return nil
 
 }
-func (s *FileServer) broadcast(p *Payload) error {
+
+func (s *FileServer) handleMessageStoreFile(from string, msg MessageStoreFile) error {
+	peer, ok := s.peers[from]
+
+	if !ok {
+		return fmt.Errorf("peer could not be found in the list: %s", from)
+	}
+	if err := s.store.Write(msg.key, peer); err != nil {
+		return err
+	}
+	peer.(*p2p.TCPPeer).Wg.Done()
+
+	return nil
+}
+func (s *FileServer) broadcast(p *Message) error {
 	peers := []io.Writer{}
 	for _, peer := range s.peers {
 		peers = append(peers, peer)
@@ -89,11 +108,12 @@ func (s *FileServer) loop() {
 	for {
 		select {
 		case rpc := <-s.Transport.Consume():
+			log.Println("rpc")
 			var msg Message
 			if err := gob.NewDecoder(bytes.NewReader(rpc.Payload)).Decode(&msg); err != nil {
 				log.Println("decoding error: ", err)
 			}
-
+			fmt.Printf("recv: %v\n", msg.Payload)
 			peer, ok := s.peers[rpc.From]
 
 			if !ok {
@@ -143,7 +163,9 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 	buf := new(bytes.Buffer)
 
 	msg := Message{
-		Payload: []byte("storagekey"),
+		Payload: MessageStoreFile{
+			key: key,
+		},
 	}
 
 	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
@@ -156,6 +178,7 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 		}
 	}
 
+	time.Sleep(time.Second * 3)
 	payload := []byte("This is a big file!!!")
 	for _, peer := range s.peers {
 		if err := peer.Send(payload); err != nil {
@@ -177,4 +200,8 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 
 	// fmt.Println(buf.Bytes())
 	// return s.broadcast(p)
+}
+
+func init() {
+	gob.Register(MessageStoreFile{})
 }

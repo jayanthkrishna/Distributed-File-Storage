@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"log"
+	"time"
 
 	"github.com/jayanthkrishna/Distributed-File-Storage/p2p"
 )
@@ -36,14 +38,17 @@ func main() {
 	fmt.Println("hello World")
 
 	s1 := makeServer(":3000", "")
+	time.Sleep(2 * time.Second)
 
 	s2 := makeServer(":4000", ":3000")
+	time.Sleep(2 * time.Second)
 
 	go s1.Start()
 	go s2.Start()
 
 	data := bytes.NewReader([]byte("My big data file is here!!!"))
 
+	log.Println("Sending the pivate file")
 	s2.Store("myprivatekey", data)
 	select {}
 }
